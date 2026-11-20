@@ -1,0 +1,55 @@
+{
+  "note": "hold_release_reentry 夹具：先造搁置点，再放行重裁。基线空闲超时 1800s。",
+  "baseline_sessions": [
+    {
+      "visitor_id": "V-2001",
+      "visitor_label": "访客甲",
+      "session_id": "S-V-2001-base",
+      "hits": [
+        {"id": "HB1", "event_ts": "2026-11-18T09:00:00Z", "page_path": "/home", "event_name": "view"},
+        {"id": "HB2", "event_ts": "2026-11-18T09:05:00Z", "page_path": "/item/1", "event_name": "click"}
+      ]
+    },
+    {
+      "visitor_id": "V-2002",
+      "visitor_label": "访客乙",
+      "session_id": "S-V-2002-base",
+      "hits": [
+        {"id": "HB3", "event_ts": "2026-11-18T10:00:00Z", "page_path": "/home", "event_name": "view"},
+        {"id": "HB4", "event_ts": "2026-11-18T10:08:00Z", "page_path": "/cart", "event_name": "view"}
+      ]
+    },
+    {
+      "visitor_id": "V-2003",
+      "visitor_label": "访客丙",
+      "session_id": null,
+      "hits": []
+    }
+  ],
+  "holds": [
+    {
+      "case": "should_split_idle_gap",
+      "expect": "split_new_open",
+      "reason": "dirty_hit_hold",
+      "hit": {"id": "HQ1", "visitor_id": "V-2001", "event_ts": "2026-11-18T10:00:00Z", "page_path": "/checkout", "event_name": "view", "visitor_label": "访客甲"}
+    },
+    {
+      "case": "should_join_within_window",
+      "expect": "join_existing_open",
+      "reason": "dirty_hit_hold",
+      "hit": {"id": "HQ2", "visitor_id": "V-2002", "event_ts": "2026-11-18T10:10:00Z", "page_path": "/cart", "event_name": "click", "visitor_label": "访客乙"}
+    },
+    {
+      "case": "should_split_no_open_session",
+      "expect": "split_new_open",
+      "reason": "dual_beacon_conflict",
+      "hit": {"id": "HQ3", "visitor_id": "V-2003", "event_ts": "2026-11-18T11:00:00Z", "page_path": "/home", "event_name": "view", "visitor_label": "访客丙"}
+    },
+    {
+      "case": "failure_rollback_missing_field_payload",
+      "expect": "rejected_no_side_effect",
+      "reason": "dirty_hit_hold",
+      "hit": {"id": "HQ4", "visitor_id": "V-2001", "event_ts": "2026-11-18T10:01:00Z", "page_path": "/checkout", "event_name": "view", "visitor_label": "访客甲"}
+    }
+  ]
+}

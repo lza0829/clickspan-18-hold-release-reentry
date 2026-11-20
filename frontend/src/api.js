@@ -17,7 +17,13 @@ export const api = {
   sessions: (visitorId) =>
     req(visitorId ? `/api/sessions?visitor_id=${encodeURIComponent(visitorId)}` : '/api/sessions'),
   session: (id) => req(`/api/sessions/${encodeURIComponent(id)}`),
-  quarantine: () => req('/api/quarantine'),
+  quarantine: (status) =>
+    req(status ? `/api/quarantine?status=${encodeURIComponent(status)}` : '/api/quarantine'),
+  holdHit: (hit, reason) => req('/api/quarantine/hold', { method: 'POST', body: JSON.stringify({ hit, reason }) }),
+  releaseHolds: (holdIds) =>
+    req('/api/quarantine/release', { method: 'POST', body: JSON.stringify({ hold_ids: holdIds }) }),
+  reentries: () => req('/api/reentries'),
+  releaseBatches: () => req('/api/release-batches'),
   ingest: () => req('/api/ingest/run', { method: 'POST' }),
   proofs: (sessionId) =>
     req(sessionId ? `/api/session-proofs?session_id=${encodeURIComponent(sessionId)}` : '/api/session-proofs'),

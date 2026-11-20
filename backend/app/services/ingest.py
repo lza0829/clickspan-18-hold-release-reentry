@@ -2,12 +2,12 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from app.db import FIXTURES_DIR, connect
+from app.db import connect, fixtures_dir
 
 
 def run_batch() -> dict:
     """基座装载：按夹具追加击点；超时切会话 / 脏点隔离留给功能题空桩。"""
-    path = FIXTURES_DIR / "ingest_batch.json"
+    path = fixtures_dir() / "ingest_batch.json"
     if not path.exists():
         return {"ok": False, "error": "缺少 ingest_batch.json"}
     payload = json.loads(path.read_text(encoding="utf-8"))

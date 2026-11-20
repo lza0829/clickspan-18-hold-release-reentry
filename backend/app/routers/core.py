@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.db import connect
 from app.seed import idle_timeout_sec
+from app.services import hold as hold_svc
 from app.services import ingest as ingest_svc
 from app.services import sessions as sess_svc
 
@@ -59,13 +60,61 @@ def get_session(session_id: str):
 
 
 @router.get("/quarantine")
-def list_quarantine():
+def list_quarantine(status: str | None = None):
     conn = connect()
     try:
-        rows = conn.execute(
-            "SELECT id, visitor_id, reason, member_json, created_at FROM quarantine ORDER BY id DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        return hold_svc.list_holds(conn, status)
+    finally:
+        conn.close()
+
+
+@router.post("/quarantine/hold")
+def post_hold(body: dict):
+    """搁置入口：把一个击点收进搁置区（夹具/手工录入共用）。"""
+    conn = connect()
+    try:
+        out = hold_svc.hold_hit(body.get("hit") or body, body.get("reason", "manual_hold"), conn)
+        conn.commit()
+        return out
+    except hold_svc.ReleaseError as e:
+        conn.rollback()
+        raise HTTPException(400, str(e))
+    finally:
+        conn.close()
+
+
+@router.post("/quarantine/release")
+def post_release(body: dict):
+    """放行：重新进入收流裁决并同事务物化，禁止直写成员。"""
+    hold_ids = body.get("hold_ids")
+    if not isinstance(hold_ids, list) or not hold_ids:
+        raise HTTPException(400, "hold_ids 必须是非空数组")
+    try:
+        hold_ids = [int(x) for x in hold_ids]
+    except (TypeError, ValueError):
+        raise HTTPException(400, "hold_ids 必须是整数数组")
+    result = hold_svc.release(hold_ids)
+    if not result.get("ok"):
+        raise HTTPException(409, result["error"])
+    return result
+
+
+@router.get("/reentries")
+def get_reentries(batch_id: str | None = None, hold_id: int | None = None):
+    """放行重裁核证（只读边表）。"""
+    conn = connect()
+    try:
+        return hold_svc.list_reentries(conn, batch_id, hold_id)
+    finally:
+        conn.close()
+
+
+@router.get("/release-batches")
+def get_release_batches():
+    """放行批次台账（只读）。"""
+    conn = connect()
+    try:
+        return hold_svc.list_batches(conn)
     finally:
         conn.close()
 

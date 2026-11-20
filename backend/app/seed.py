@@ -1,6 +1,6 @@
 import json
 
-from app.db import FIXTURES_DIR, connect
+from app.db import connect, fixtures_dir
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -39,13 +39,42 @@ CREATE TABLE IF NOT EXISTS quarantine (
   visitor_id TEXT,
   reason TEXT NOT NULL,
   member_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'held',
+  release_batch_id TEXT,
+  released_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ingest_batches (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
   report_json TEXT NOT NULL DEFAULT '{}'
+);
+
+-- 放行批次：一次放行动作一行（不可变，仅 INSERT）
+CREATE TABLE IF NOT EXISTS hold_release_batches (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  requested_hold_ids_json TEXT NOT NULL,
+  entry_count INTEGER NOT NULL,
+  result TEXT NOT NULL,
+  report_json TEXT NOT NULL DEFAULT '{}'
+);
+
+-- 独立放行重裁边表：每个搁置成员一行，记录重裁前后会话与切开结论（不可变，仅 INSERT）
+CREATE TABLE IF NOT EXISTS hold_release_reentries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  release_batch_id TEXT NOT NULL,
+  hold_id INTEGER NOT NULL,
+  hold_key TEXT NOT NULL,
+  visitor_id TEXT NOT NULL,
+  trigger_hit_id TEXT NOT NULL,
+  old_session_id TEXT,
+  new_session_id TEXT NOT NULL,
+  split INTEGER NOT NULL,
+  gate_decisions_json TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS session_proofs (
@@ -60,10 +89,25 @@ CREATE TABLE IF NOT EXISTS session_proofs (
 );
 """
 
+# 既有库的增量迁移（新库由 SCHEMA 直接建成）
+_QUARANTINE_MIGRATIONS = [
+    ("status", "ALTER TABLE quarantine ADD COLUMN status TEXT NOT NULL DEFAULT 'held'"),
+    ("release_batch_id", "ALTER TABLE quarantine ADD COLUMN release_batch_id TEXT"),
+    ("released_at", "ALTER TABLE quarantine ADD COLUMN released_at TEXT"),
+]
+
+
+def _migrate(conn):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(quarantine)").fetchall()}
+    for col, ddl in _QUARANTINE_MIGRATIONS:
+        if col not in cols:
+            conn.execute(ddl)
+
 
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA)
+    _migrate(conn)
     row = conn.execute("SELECT value FROM settings WHERE key='idle_timeout_sec'").fetchone()
     if not row:
         conn.execute(
@@ -78,7 +122,7 @@ def init_db():
 
 
 def _seed_fixtures(conn):
-    fixture = FIXTURES_DIR / "seed_hits.json"
+    fixture = fixtures_dir() / "seed_hits.json"
     if not fixture.exists():
         return
     data = json.loads(fixture.read_text(encoding="utf-8"))
